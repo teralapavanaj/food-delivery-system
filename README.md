@@ -98,3 +98,9 @@ loop continues — nothing crashes the program.
   `models.py` and registering it in `DELIVERY_TYPES`.
 - Swap the CLI for a GUI/web frontend later without touching
   `models.py` or `data_manager.py` — they have no I/O-to-console coupling.
+## Known issues
+
+- **D-01:** Order IDs restart from 1 after each run and are not checked against `orders.json`. New orders can reuse existing IDs, so status lookups may act on the wrong order.
+- **D-02:** Cancelling an order does not restore stock. Cancelled quantities stay deducted.
+- **D-03:** Order status logic is duplicated in `models.py` and `data_manager.py`.
+- **D-04:** Scheduled delivery always stores "later today"; no time can be entered.
