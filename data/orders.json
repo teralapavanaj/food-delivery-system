@@ -1,0 +1,27 @@
+[
+  {
+    "order_id": "1",
+    "customer_id": "C1",
+    "restaurant_id": "R1",
+    "delivery_type": "Standard",
+    "scheduled_for": null,
+    "recipient_name": "Shishir",
+    "recipient_phone": "9999999999",
+    "delivery_address": "Hyderabad, India",
+    "items": [
+      {
+        "food_id": "F1",
+        "quantity": 2
+      },
+      {
+        "food_id": "F2",
+        "quantity": 1
+      }
+    ],
+    "subtotal": 530.0,
+    "delivery_charge": 0.0,
+    "total": 530.0,
+    "timestamp": "2026-11-23T23:57:37",
+    "status": "DELIVERED"
+  }
+]

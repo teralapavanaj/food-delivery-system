@@ -14,8 +14,13 @@ import csv
 import json
 import os
 
-from exceptions import FileOperationError, InvalidOrderIDError, InvalidStatusTransitionError
-from models import FoodItem, Restaurant, Customer, Order
+from exceptions import (
+    FileOperationError,
+    InvalidFoodIDError,
+    InvalidOrderIDError,
+    InvalidStatusTransitionError,
+)
+from models import FoodItem, Restaurant, Customer, Order, next_status, check_cancellable
 
 
 class DataManager:
@@ -25,6 +30,7 @@ class DataManager:
         self.restaurants = {}   # restaurant_id -> Restaurant
         self.food_items = {}    # food_id -> FoodItem
         self.customers = {}     # customer_id -> Customer
+        self._last_order_number = None  # loaded lazily by next_order_id()
 
     def _path(self, filename):
         return os.path.join(self.data_dir, filename)
@@ -81,7 +87,7 @@ class DataManager:
             raise FileOperationError(filename, str(e))
 
     def save_food_items(self, filename="food_items.csv"):
-        """Persist current stock/availability back to the CSV (call after each order)."""
+        """Persist current stock/availability back to the CSV."""
         path = self._path(filename)
         try:
             with open(path, "w", newline="", encoding="utf-8") as f:
@@ -121,7 +127,7 @@ class DataManager:
             raise FileOperationError(filename, str(e))
 
     # ------------------------------------------------------------
-    # Orders (JSON) - append-only order log
+    # Orders (JSON), append-only order log
     # ------------------------------------------------------------
     def save_order(self, order, filename="orders.json"):
         path = self._path(filename)
@@ -157,31 +163,22 @@ class DataManager:
 
     def update_order_status(self, order_id, new_status=None, filename="orders.json"):
         """
-        Move an order to the next stage in Order.STATUS_FLOW (default), or to a
-        specific `new_status` if given. Returns the updated order record.
-        Raises InvalidOrderIDError / InvalidStatusTransitionError as appropriate.
+        Advance an order one stage (default) or cancel it (new_status="CANCELLED").
+        Cancelling restores stock for every line in the order.
         """
         orders = self._load_orders_raw(filename)
-        record = None
-        for r in orders:
-            if r["order_id"] == str(order_id):
-                record = r
-                break
+        record = next((r for r in orders if r["order_id"] == str(order_id)), None)
         if record is None:
             raise InvalidOrderIDError(order_id)
 
         current = record["status"]
         if new_status is None:
-            if current == "CANCELLED":
-                raise InvalidStatusTransitionError(current, "advance")
-            idx = Order.STATUS_FLOW.index(current)
-            if idx == len(Order.STATUS_FLOW) - 1:
-                raise InvalidStatusTransitionError(current, "further")
-            record["status"] = Order.STATUS_FLOW[idx + 1]
+            record["status"] = next_status(current)
+            restore = False
         elif new_status == "CANCELLED":
-            if current in ("OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"):
-                raise InvalidStatusTransitionError(current, "CANCELLED")
+            check_cancellable(current)
             record["status"] = "CANCELLED"
+            restore = True
         else:
             raise InvalidStatusTransitionError(current, new_status)
 
@@ -190,7 +187,40 @@ class DataManager:
                 json.dump(orders, f, indent=2)
         except OSError as e:
             raise FileOperationError(filename, str(e))
+
+        if restore:
+            self._restore_stock(record)
         return record
+
+    # ------------------------------------------------------------
+    # Order IDs, food lookup, stock restore
+    # ------------------------------------------------------------
+    def next_order_id(self, filename="orders.json"):
+        """Return the next unused numeric order ID, seeded from orders.json (D-01)."""
+        if self._last_order_number is None:
+            existing = [
+                int(r["order_id"])
+                for r in self._load_orders_raw(filename)
+                if str(r["order_id"]).isdigit()
+            ]
+            self._last_order_number = max(existing, default=0)
+        self._last_order_number += 1
+        return str(self._last_order_number)
+
+    def get_food_item(self, food_id, restaurant_id=None):
+        """Return the FoodItem, or raise InvalidFoodIDError (D-06)."""
+        item = self.food_items.get(food_id)
+        if item is None or (restaurant_id is not None and item.restaurant_id != restaurant_id):
+            raise InvalidFoodIDError(food_id)
+        return item
+
+    def _restore_stock(self, record):
+        """Return every unit in a cancelled order to stock and persist it (D-02)."""
+        for line in record["items"]:
+            item = self.food_items.get(line["food_id"])
+            if item is not None:
+                item.restock(line["quantity"])
+        self.save_food_items()
 
     # ------------------------------------------------------------
     # Load everything at startup

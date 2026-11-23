@@ -93,3 +93,20 @@ class FileOperationError(FoodDeliveryError):
         self.filename = filename
         self.reason = reason
         super().__init__(f"File operation failed for '{filename}': {reason}")
+
+
+class InvalidContactDetailsError(FoodDeliveryError):
+    """Raised when a phone number or address fails validation."""
+
+    def __init__(self, field, reason):
+        self.field = field
+        self.reason = reason
+        super().__init__(f"Invalid {field}: {reason}.")
+
+
+class InvalidScheduleError(FoodDeliveryError):
+    """Raised when a scheduled delivery time is malformed or in the past."""
+
+    def __init__(self, reason):
+        self.reason = reason
+        super().__init__(f"Invalid schedule: {reason}.")

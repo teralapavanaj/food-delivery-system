@@ -100,7 +100,14 @@ loop continues — nothing crashes the program.
   `models.py` or `data_manager.py` — they have no I/O-to-console coupling.
 ## Known issues
 
-- **D-01:** Order IDs restart from 1 after each run and are not checked against `orders.json`. New orders can reuse existing IDs, so status lookups may act on the wrong order.
-- **D-02:** Cancelling an order does not restore stock. Cancelled quantities stay deducted.
-- **D-03:** Order status logic is duplicated in `models.py` and `data_manager.py`.
-- **D-04:** Scheduled delivery always stores "later today"; no time can be entered.
+- ## Resolved in this version
+
+The following defects from the earlier prototype are fixed:
+
+- **D-01:** Order IDs continue from `orders.json` across runs.
+- **D-02:** Cancelling an order restores its stock.
+- **D-03:** Status logic lives in one place (`next_status()` and `check_cancellable()` in `models.py`).
+- **D-04:** Scheduled delivery requires a future date and time.
+- **D-05:** Scheduled time is saved with the order.
+- **D-06:** Food lookup uses one validated path (`get_food_item()`).
+- **D-07:** Phone numbers and addresses are validated before an order or customer is saved.

@@ -1,5 +1,5 @@
 """
-Food Delivery Management System - CLI prototype.
+Food Delivery Management System, CLI prototype.
 
 Run:  python main.py
 
@@ -11,10 +11,18 @@ Menu-driven console app that ties together:
 """
 
 from data_manager import DataManager
-from models import Customer, Order, DELIVERY_TYPES
+from models import (
+    Customer,
+    Order,
+    DELIVERY_TYPES,
+    ScheduledDelivery,
+    StandardDelivery,
+    parse_schedule,
+    validate_phone,
+    validate_address,
+)
 from exceptions import (
     FoodDeliveryError,
-    InvalidFoodIDError,
     InvalidRestaurantIDError,
     InvalidCustomerIDError,
     InvalidOrderIDError,
@@ -96,8 +104,8 @@ def register_customer(dm: DataManager):
         print("That customer ID already exists.")
         return
     name = input("Name: ").strip()
-    phone = input("Phone: ").strip()
-    address = input("Address: ").strip()
+    phone = validate_phone(input("Phone: ").strip())
+    address = validate_address(input("Address: ").strip())
     customer = Customer(cid, name, phone, address)
     dm.customers[cid] = customer
     dm.save_customers()
@@ -105,18 +113,18 @@ def register_customer(dm: DataManager):
 
 
 def _get_or_register_customer(dm: DataManager, cid):
-    """Look up a customer by ID; if they don't exist yet, collect their
+    """Look up a customer by ID. If they don't exist yet, collect their
     details right here instead of forcing a separate 'register' step first."""
     customer = dm.customers.get(cid)
     if customer is not None:
         return customer
 
-    print(f"No customer with ID '{cid}' yet — let's register you.")
+    print(f"No customer with ID '{cid}' yet, let's register you.")
     name = input("  Your name: ").strip()
-    phone = input("  Phone number: ").strip()
-    address = input("  Address: ").strip()
-    if not name or not phone or not address:
-        raise InvalidCustomerIDError(cid)  # incomplete details, nothing to save
+    phone = validate_phone(input("  Phone number: ").strip())
+    address = validate_address(input("  Address: ").strip())
+    if not name:
+        raise InvalidCustomerIDError(cid)
     customer = Customer(cid, name, phone, address)
     dm.customers[cid] = customer
     dm.save_customers()
@@ -139,16 +147,24 @@ def place_order(dm: DataManager):
 
     print("\nDelivery type: 1) Standard  2) Express  3) Scheduled")
     choice = input("Choose delivery type [1-3]: ").strip()
-    delivery_cls = DELIVERY_TYPES.get(choice)
-    if delivery_cls is None:
-        print("Invalid choice, defaulting to Standard.")
-        delivery_cls = DELIVERY_TYPES["1"]
-    delivery_type = delivery_cls()
+    if choice == "3":
+        when = input("Delivery date and time (YYYY-MM-DD HH:MM): ")
+        delivery_type = ScheduledDelivery(parse_schedule(when))
+    else:
+        delivery_cls = DELIVERY_TYPES.get(choice)
+        if delivery_cls is None:
+            print("Invalid choice, defaulting to Standard.")
+            delivery_cls = StandardDelivery
+        delivery_type = delivery_cls()
 
-    print(f"\nWho should this order be delivered to? (blank = use your saved details)")
+    print("\nWho should this order be delivered to? (blank = use your saved details)")
     recipient_name = input(f"  Recipient name [{customer.name}]: ").strip() or customer.name
     recipient_phone = input(f"  Phone [{customer.phone}]: ").strip() or customer.phone
     delivery_address = input(f"  Delivery address [{customer.address}]: ").strip() or customer.address
+
+    # Validate before any stock is deducted, so bad details cannot leave stock reduced.
+    recipient_phone = validate_phone(recipient_phone)
+    delivery_address = validate_address(delivery_address)
 
     order = Order(
         customer, restaurant, delivery_type,
@@ -162,26 +178,23 @@ def place_order(dm: DataManager):
         if not food_id:
             break
         try:
-            item = dm.food_items.get(food_id)
-            if item is None or item.restaurant_id != restaurant.restaurant_id:
-                raise InvalidFoodIDError(food_id)
+            item = dm.get_food_item(food_id, restaurant.restaurant_id)  # D-06
             qty_raw = input(f"Quantity of '{item.name}' (in stock: {item.stock}): ").strip()
             qty = int(qty_raw) if qty_raw.lstrip("-").isdigit() else -1
-            order.add_line(item, qty)  # checks availability + stock, then deducts stock
+            order.add_line(item, qty)
             print(f"  Added: {item.name} x{qty}")
         except FoodDeliveryError as e:
-            # Caught per-item so one bad entry doesn't lose the rest of the cart
-            # or leave stock partially deducted for an order that never completes.
             print(f"  Error: {e}")
 
     if not order.lines:
         print("Order cancelled: no items added.")
         return
 
+    order.order_id = dm.next_order_id()  # D-01: assigned only when the order is kept
     customer.order_history.append(order.order_id)
     dm.save_order(order)
     dm.save_customers()
-    dm.save_food_items()  # persist the stock deductions made above
+    dm.save_food_items()
 
     print("\n" + order.receipt())
     print(f"Track this order anytime with option 7, Order ID: {order.order_id}")
@@ -201,7 +214,7 @@ def view_order_history(dm: DataManager):
 def track_order(dm: DataManager):
     order_id = input("Order ID: ").strip()
     record = dm.get_order_status(order_id)  # raises InvalidOrderIDError if not found
-    print(f"\nOrder #{record['order_id']} — current status: {record['status']}")
+    print(f"\nOrder #{record['order_id']}, current status: {record['status']}")
     print(f"  Flow: {' -> '.join(Order.STATUS_FLOW)}")
 
     if record["status"] in ("DELIVERED", "CANCELLED"):
@@ -215,8 +228,8 @@ def track_order(dm: DataManager):
         updated = dm.update_order_status(order_id)  # advances one step
         print(f"Order #{order_id} is now: {updated['status']}")
     elif action == "c":
-        updated = dm.update_order_status(order_id, new_status="CANCELLED")
-        print(f"Order #{order_id} has been cancelled.")
+        dm.update_order_status(order_id, new_status="CANCELLED")
+        print(f"Order #{order_id} has been cancelled and its stock restored.")
 
 
 def main():
@@ -256,7 +269,6 @@ def main():
         try:
             action(dm)
         except FoodDeliveryError as e:
-            # All custom exceptions share this base -> one clean handler.
             print(f"Error: {e}")
         except ValueError as e:
             print(f"Invalid input: {e}")

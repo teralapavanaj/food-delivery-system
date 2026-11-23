@@ -1,7 +1,7 @@
 """
 Core domain classes for the Food Delivery Management System.
 
-Class design (matches the project spec):
+Class design:
 - FoodItem, Restaurant, Customer -> core entities
 - Order -> ties a customer, restaurant, and food items together
 - DeliveryType (abstract base) -> StandardDelivery / ExpressDelivery /
@@ -9,6 +9,7 @@ Class design (matches the project spec):
   through an overridden calculate_charge() method.
 """
 
+import re
 from abc import ABC, abstractmethod
 from datetime import datetime
 
@@ -17,7 +18,62 @@ from exceptions import (
     ItemUnavailableError,
     InsufficientStockError,
     InvalidStatusTransitionError,
+    InvalidContactDetailsError,
+    InvalidScheduleError,
 )
+
+
+# Single source of truth for order status rules (D-03).
+ORDER_STATUS_FLOW = ["PLACED", "CONFIRMED", "OUT_FOR_DELIVERY", "DELIVERED"]
+CANCELLABLE_STATUSES = ("PLACED", "CONFIRMED")
+
+SCHEDULE_FORMAT = "%Y-%m-%d %H:%M"
+_PHONE_RE = re.compile(r"^\+?\d{10,15}$")
+
+
+def next_status(current):
+    """Return the status that follows `current`, or raise InvalidStatusTransitionError."""
+    if current not in ORDER_STATUS_FLOW:
+        raise InvalidStatusTransitionError(current, "advance")
+    idx = ORDER_STATUS_FLOW.index(current)
+    if idx == len(ORDER_STATUS_FLOW) - 1:
+        raise InvalidStatusTransitionError(current, "further")
+    return ORDER_STATUS_FLOW[idx + 1]
+
+
+def check_cancellable(current):
+    """Raise InvalidStatusTransitionError unless the order can still be cancelled."""
+    if current not in CANCELLABLE_STATUSES:
+        raise InvalidStatusTransitionError(current, "CANCELLED")
+
+
+def validate_phone(phone):
+    """Return the phone number with spaces and dashes removed, or raise (D-07)."""
+    cleaned = phone.replace(" ", "").replace("-", "")
+    if not _PHONE_RE.match(cleaned):
+        raise InvalidContactDetailsError(
+            "phone number", "use 10 to 15 digits, optionally starting with +"
+        )
+    return cleaned
+
+
+def validate_address(address):
+    """Return the stripped address, or raise (D-07)."""
+    address = address.strip()
+    if len(address) < 5:
+        raise InvalidContactDetailsError("address", "must be at least 5 characters")
+    return address
+
+
+def parse_schedule(text):
+    """Parse 'YYYY-MM-DD HH:MM', require a future time, return the normalised string (D-04)."""
+    try:
+        when = datetime.strptime(text.strip(), SCHEDULE_FORMAT)
+    except ValueError:
+        raise InvalidScheduleError("use the format YYYY-MM-DD HH:MM")
+    if when <= datetime.now():
+        raise InvalidScheduleError("the time must be in the future")
+    return when.strftime(SCHEDULE_FORMAT)
 
 
 class FoodItem:
@@ -25,7 +81,7 @@ class FoodItem:
 
     `available` is a manual on/off switch a restaurant can flip (e.g. the
     kitchen stopped making it today). `stock` is the actual unit count
-    left — it goes down as orders are placed and is the thing that runs
+    left. It goes down as orders are placed and is the thing that runs
     out on its own, independent of the `available` flag.
     """
 
@@ -51,7 +107,7 @@ class FoodItem:
         self.stock -= quantity
 
     def restock(self, quantity):
-        """Add units back (e.g. a restaurant topping up supply)."""
+        """Add units back (e.g. a restaurant topping up supply, or a cancelled order)."""
         if quantity < 0:
             raise InvalidQuantityError(quantity)
         self.stock += quantity
@@ -174,8 +230,8 @@ class ExpressDelivery(DeliveryType):
 class ScheduledDelivery(DeliveryType):
     name = "Scheduled"
 
-    def __init__(self, scheduled_for=None):
-        self.scheduled_for = scheduled_for or "later today"
+    def __init__(self, scheduled_for):
+        self.scheduled_for = scheduled_for  # validated by parse_schedule()
 
     def calculate_charge(self, order_subtotal):
         # Cheapest option since there's no rush.
@@ -191,7 +247,6 @@ class ScheduledDelivery(DeliveryType):
 DELIVERY_TYPES = {
     "1": StandardDelivery,
     "2": ExpressDelivery,
-    "3": ScheduledDelivery,
 }
 
 
@@ -204,7 +259,7 @@ class OrderLine:
 
     Creating a line checks, in order: quantity is a valid positive int,
     the item hasn't been switched off (`available`), and there's enough
-    `stock` left -- then it deducts the stock immediately, so the next
+    `stock` left. Then it deducts the stock immediately, so the next
     customer sees an accurate count.
     """
 
@@ -228,11 +283,8 @@ class OrderLine:
 class Order:
     """A customer's order from one restaurant, with a delivery strategy."""
 
-    _next_id = 1
-
-    # The only statuses an order can be in, in the order they must occur.
-    # CANCELLED can be reached from PLACED or CONFIRMED only (handled in cancel()).
-    STATUS_FLOW = ["PLACED", "CONFIRMED", "OUT_FOR_DELIVERY", "DELIVERED"]
+    # Kept as an attribute because main.py reads Order.STATUS_FLOW.
+    STATUS_FLOW = ORDER_STATUS_FLOW
 
     def __init__(
         self,
@@ -244,9 +296,8 @@ class Order:
         recipient_phone=None,
         delivery_address=None,
     ):
-        self.order_id = str(order_id) if order_id else str(Order._next_id)
-        if order_id is None:
-            Order._next_id += 1
+        # order_id is assigned by DataManager.next_order_id() when the order is saved (D-01).
+        self.order_id = str(order_id) if order_id is not None else None
         self.customer = customer
         self.restaurant = restaurant
         self.delivery_type = delivery_type
@@ -254,27 +305,13 @@ class Order:
         self.timestamp = datetime.now().isoformat(timespec="seconds")
         self.status = "PLACED"
 
-        # Who/where this specific order goes to -- collected at checkout time.
-        # Falls back to the customer's saved profile if not given separately
-        # (e.g. ordering for someone else, or a different delivery address).
+        # Who/where this specific order goes to, collected at checkout time.
         self.recipient_name = recipient_name or customer.name
         self.recipient_phone = recipient_phone or customer.phone
         self.delivery_address = delivery_address or customer.address
 
-    def advance_status(self):
-        """Move the order to the next stage in STATUS_FLOW. Returns the new status."""
-        if self.status == "CANCELLED":
-            raise InvalidStatusTransitionError(self.status, "advance")
-        idx = self.STATUS_FLOW.index(self.status)
-        if idx == len(self.STATUS_FLOW) - 1:
-            raise InvalidStatusTransitionError(self.status, "further")
-        self.status = self.STATUS_FLOW[idx + 1]
-        return self.status
-
-    def cancel(self):
-        if self.status in ("OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"):
-            raise InvalidStatusTransitionError(self.status, "CANCELLED")
-        self.status = "CANCELLED"
+    # advance_status() and cancel() were removed (D-03).
+    # Status changes go through DataManager.update_order_status().
 
     def add_line(self, food_item, quantity):
         line = OrderLine(food_item, quantity)
@@ -300,6 +337,7 @@ class Order:
             "customer_id": self.customer.customer_id,
             "restaurant_id": self.restaurant.restaurant_id,
             "delivery_type": self.delivery_type.name,
+            "scheduled_for": getattr(self.delivery_type, "scheduled_for", None),  # D-05
             "recipient_name": self.recipient_name,
             "recipient_phone": self.recipient_phone,
             "delivery_address": self.delivery_address,
@@ -315,8 +353,13 @@ class Order:
         }
 
     def receipt(self):
+        label = self.order_id if self.order_id else "not yet assigned"
+        if isinstance(self.delivery_type, ScheduledDelivery):
+            eta = f"at {self.delivery_type.scheduled_for}"
+        else:
+            eta = f"{self.delivery_type.estimated_time_minutes()} min"
         lines = [
-            f"Order #{self.order_id} - {self.status}",
+            f"Order #{label} - {self.status}",
             f"Deliver to : {self.recipient_name}  ({self.recipient_phone})",
             f"Address    : {self.delivery_address}",
             f"Restaurant: {self.restaurant.name}",
@@ -328,5 +371,5 @@ class Order:
         lines.append(f"Subtotal        : Rs.{self.subtotal:.2f}")
         lines.append(f"Delivery ({self.delivery_type}): Rs.{self.delivery_charge:.2f}")
         lines.append(f"TOTAL           : Rs.{self.total:.2f}")
-        lines.append(f"ETA             : {self.delivery_type.estimated_time_minutes()} min")
+        lines.append(f"ETA             : {eta}")
         return "\n".join(lines)

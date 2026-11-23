@@ -11,7 +11,7 @@ Run:  python demo.py
 """
 
 from data_manager import DataManager
-from models import Order, StandardDelivery, ExpressDelivery, ScheduledDelivery
+from models import Order, StandardDelivery, ExpressDelivery
 from exceptions import (
     InvalidFoodIDError,
     ItemUnavailableError,
@@ -39,6 +39,7 @@ def main():
     order = Order(customer, restaurant, StandardDelivery())
     order.add_line(dm.food_items["F1"], 2)   # Paneer Butter Masala x2
     order.add_line(dm.food_items["F2"], 1)   # Masala Dosa x1
+    order.order_id = dm.next_order_id()
     print(order.receipt())
     customer.order_history.append(order.order_id)
     dm.save_order(order)
@@ -56,8 +57,7 @@ def main():
 
     print("\n--- Exception handling checks ---")
     try:
-        if "DOES_NOT_EXIST" not in dm.food_items:
-            raise InvalidFoodIDError("DOES_NOT_EXIST")
+        dm.get_food_item("DOES_NOT_EXIST")
     except InvalidFoodIDError as e:
         print(f"Caught expected error: {e}")
 
@@ -72,7 +72,7 @@ def main():
         print(f"Caught expected error: {e}")
 
     try:
-        # F3 (Gulab Jamun) starts with only 2 in stock -- ask for way more.
+        # F3 (Gulab Jamun) starts with only 2 in stock; ask for way more.
         order.add_line(dm.food_items["F3"], 999)
     except InsufficientStockError as e:
         print(f"Caught expected error: {e}")
