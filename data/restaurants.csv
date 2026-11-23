@@ -1,0 +1,11 @@
+restaurant_id,name,cuisine,rating
+R1,Spice Villa,Indian,4.5
+R2,Pizza Point,Italian,4.2
+R3,Dragon Wok,Chinese,4.0
+R4,Taco Fiesta,Mexican,4.3
+R5,Burger Barn,American,4.1
+R6,Sushi Sensei,Japanese,4.6
+R7,Curry Leaf,South Indian,4.4
+R8,Sweet Treats Bakery,Desserts,4.7
+R9,Green Bowl,Healthy/Salads,4.2
+R10,Brew & Bean,Beverages/Cafe,4.3

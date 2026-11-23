@@ -1,0 +1,66 @@
+food_id,name,category,price,restaurant_id,available,stock
+F1,Paneer Butter Masala,Main Course,220,R1,true,15
+F2,Masala Dosa,Breakfast,90,R1,true,20
+F3,Gulab Jamun,Dessert,60,R1,true,2
+F4,Butter Chicken,Main Course,260,R1,true,12
+F5,Veg Biryani,Main Course,200,R1,true,10
+F6,Chicken Biryani,Main Course,240,R1,true,10
+F7,Naan,Bread,35,R1,true,40
+F8,Tandoori Roti,Bread,25,R1,true,40
+F9,Samosa,Starter,40,R1,true,30
+F10,Lassi,Beverage,50,R1,true,18
+F11,Margherita Pizza,Pizza,260,R2,true,10
+F12,Pepperoni Pizza,Pizza,320,R2,true,10
+F13,Garlic Bread,Starter,120,R2,true,25
+F14,Pasta Alfredo,Main Course,280,R2,true,9
+F15,Pasta Arrabbiata,Main Course,260,R2,true,9
+F16,Lasagna,Main Course,310,R2,true,7
+F17,Tiramisu,Dessert,180,R2,true,6
+F18,Bruschetta,Starter,150,R2,true,14
+F19,Veg Hakka Noodles,Main Course,180,R3,true,12
+F20,Chilli Chicken,Starter,210,R3,true,8
+F21,Spring Rolls,Starter,140,R3,false,0
+F22,Manchurian,Starter,170,R3,true,11
+F23,Fried Rice,Main Course,190,R3,true,13
+F24,Schezwan Noodles,Main Course,195,R3,true,10
+F25,Dim Sum,Starter,160,R3,true,16
+F26,Chicken Tacos,Main Course,230,R4,true,14
+F27,Veg Burrito,Main Course,210,R4,true,12
+F28,Nachos,Starter,190,R4,true,20
+F29,Quesadilla,Main Course,220,R4,true,10
+F30,Churros,Dessert,130,R4,true,15
+F31,Guacamole & Chips,Starter,150,R4,true,18
+F32,Classic Cheeseburger,Main Course,180,R5,true,22
+F33,Double Patty Burger,Main Course,250,R5,true,14
+F34,French Fries,Starter,100,R5,true,35
+F35,Chicken Wings,Starter,220,R5,true,16
+F36,Onion Rings,Starter,110,R5,true,20
+F37,Milkshake,Beverage,140,R5,true,19
+F38,Salmon Nigiri,Main Course,320,R6,true,8
+F39,California Roll,Main Course,280,R6,true,10
+F40,Tempura Udon,Main Course,260,R6,true,9
+F41,Miso Soup,Starter,90,R6,true,25
+F42,Edamame,Starter,100,R6,true,22
+F43,Dragon Roll,Main Course,340,R6,true,7
+F44,Idli Sambar,Breakfast,70,R7,true,30
+F45,Medu Vada,Breakfast,65,R7,true,25
+F46,Pongal,Breakfast,80,R7,true,18
+F47,Rava Dosa,Breakfast,100,R7,true,16
+F48,Filter Coffee,Beverage,40,R7,true,40
+F49,Curd Rice,Main Course,90,R7,true,20
+F50,Chocolate Brownie,Dessert,120,R8,true,20
+F51,Red Velvet Cake,Dessert,180,R8,true,12
+F52,Croissant,Bakery,80,R8,true,25
+F53,Blueberry Muffin,Bakery,90,R8,true,20
+F54,Cheesecake,Dessert,200,R8,true,10
+F55,Donut,Bakery,60,R8,true,30
+F56,Quinoa Salad,Salad,190,R9,true,15
+F57,Greek Salad,Salad,170,R9,true,15
+F58,Grilled Chicken Bowl,Main Course,240,R9,true,12
+F59,Smoothie Bowl,Breakfast,210,R9,true,10
+F60,Avocado Toast,Breakfast,180,R9,true,14
+F61,Cold Brew Coffee,Beverage,120,R10,true,25
+F62,Cappuccino,Beverage,110,R10,true,25
+F63,Masala Chai,Beverage,45,R10,true,40
+F64,Iced Tea,Beverage,90,R10,true,22
+F65,Chocolate Muffin,Bakery,85,R10,true,18
